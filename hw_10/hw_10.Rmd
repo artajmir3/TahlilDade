@@ -1,0 +1,384 @@
+---
+title: "Cluster Analysis"
+subtitle: "WDI Indicators (sorry but the term 'WDI Indicator' is wrong WDI itself stands for World Development Indicators so 'WDI Indicator' means 'World Development Indicators Indicator' which is wrong)" 
+author: "Aryan Tajmirriahi"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+<div align="center">
+<img  src="images/best_hans_talks_1200x627.jpg"  align = 'center'>
+</div>
+
+> <p dir="RTL"> 
+با توجه به داده بانک جهانی به سوالات زیر پاسخ دهید. برای استفاده از داده از سه فایل زیر استفاده نمایید.
+داده نام کشورها: WDICountry
+داده نام سری های زمانی: WDISeries
+داده کل: WDIData
+در صورتی که داده را در اختیار ندارید می توانید از بسته WDI استفاده نموده و داده های مورد نظر را استخراج نمایید.
+</p>
+
+<p dir="RTL">
+لطفا در ابتدا کد زیر را برای آماده سازی داده اجرا کنید.
+</p>
+
+```{r}
+
+library(WDI)
+library(dplyr)
+library(highcharter)
+library(ggplot2)
+library(stats)
+library(tidyr)
+library(countrycode)
+library(h2o)
+
+data = read.csv("E:\\edu\\TahlilDade\\data\\WDIDATA.csv")
+data %>% 
+  gather(str_year, measure, -Country.Code, -Indicator.Name, -Indicator.Code, -`ï..Country.Name`)%>% 
+  mutate(year=as.integer(substr(str_year, 2, 5))) -> data1
+data1 %>%
+  select(-Indicator.Name) %>% 
+  spread(Indicator.Code, measure) %>% 
+  rename(country = `ï..Country.Name`, iso2c=Country.Code)-> data2
+```
+ 
+
+***
+
+<p dir="RTL">
+۱. ده کشور فقیر دنیا را بیابید. نمودار درآمد روزانه آنها را رسم کنید. چند درصد از اعضای این کشورها زیر خط فقر هستند؟ متوسط عمر در این کشورها چقدر است؟
+</p>
+
+```{r}
+data2 %>% 
+  select(poverty_rat = 'SI.POV.NAHC', income = NY.GDP.PCAP.CD, country, life_exp=SP.DYN.LE00.IN, iso2c, year) -> data_q1
+
+data_q1%>% 
+  group_by(iso2c, country) %>% 
+  summarise(avg_pov_rat = mean(poverty_rat, na.rm = TRUE), avg_income = mean(income, na.rm = TRUE), avg_life_exp = mean(life_exp, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  arrange(avg_income) %>% 
+  slice(1:10) -> data_q1_1
+data_q1_1 %>% View()
+ggplot(data_q1_1, aes(x = country, y = avg_income)) + geom_col()
+```
+
+
+***
+
+<p dir="RTL">
+۲. تراژدی روآندا: بر اساس داده های امید به زندگی ابتدا نمودار سالانه نمودار جعبه ایی امید به زندگی کشورها را رسم نمایید(در یک نمودار!). سپس سری زمانی امید به زندگی روآندا را به آن اضافه کنید. چه می بینید؟ چند میلیون نفر کشته شدند؟
+</p>
+
+```{r}
+data2 %>% 
+  select(life_exp = SP.DYN.LE00.IN, country, iso2c, year) -> data_q2
+data_q2$myyear = paste("", data_q2$year)
+data_q2$is_rwanda = data_q2$country == "Rwanda"
+ggplot(data=data_q2, aes(x=myyear, y=life_exp)) + geom_boxplot() + geom_point(data = data_q2 %>% filter(country=="Rwanda"), color="red")
+data_q2 %>% View()
+data2 %>% 
+  select(population = SP.POP.TOTL, country, iso2c, year) %>%
+  filter(country == 'Rwanda') %>% 
+  .[complete.cases(.),] -> data_q2_2
+  
+data_q2_2 %>% lm(population~year, data = .) -> fit
+data_q2_2 %>% cbind(predict.lm(fit, .),.) %>% View
+```
+
+
+***
+
+<p dir="RTL">
+۳. نمودار امید به زندگی و هزینه های بهداشتی را رسم کنید. چه نتیجه ایی می گیرید؟
+</p>
+
+```{r}
+data2 %>% 
+  select(life_exp = SP.DYN.LE00.IN, health=SH.XPD.CHEX.PC.CD, country, iso2c, year) ->data_q3
+ggplot(data=data_q3, aes(x = life_exp, y=health)) + geom_point()
+```
+
+
+***
+
+<p dir="RTL">
+۴. آیا قدرت خرید خانواده های ایرانی در ۵۰ سال اخیر افزایش یافته است؟ برای این کار از داده های اقتصادی خانوار استفاده کنید.
+</p>
+
+```{r}
+data2 %>%
+  filter(iso2c=="IRN") %>% 
+  select(country, iso2c, year, purchase_power = NY.GDP.PCAP.PP.CD)  ->data_q4
+ggplot(data_q4, aes(x=year, y=purchase_power)) + geom_col()
+```
+
+
+
+***
+
+<p dir="RTL">
+۵. رشد اقتصادی ایران را با کشورهای دیگر در طول ۲۰ سال گذشته بر حسب بیست شاخص های اقتصادی مهم مانند تولید ناخالص ملی، تورم و … ارزیابی کنید! (برای هر شاخص از تصویرسازی استفاده کنید.)
+</p>
+
+```{r}
+economic_indicators = c('NE.EXP.GNFS.ZS', 'NE.IMP.GNFS.ZS', 'FP.CPI.TOTL.ZG', 'NY.GDP.DEFL.KD.ZG',
+                        'MS.MIL.MPRT.KD', 'MS.MIL.XPRT.KD', 'TX.MNF.TECH.ZS.UN', 'FI.RES.TOTL.CD',
+                        'GC.TAX.TOTL.GD.ZS', 'GC.TAX.EXPT.ZS', 'BX.KLT.DINV.CD.WD', 'BX.KLT.DINV.WD.GD',
+                        'NY.GDP.MKTP.KD.ZG', 'SI.POV.GAPS', 'SI.POV.LMIC.GP',
+                        'SI.POV.UMIC.GP', 'BN.CAB.XOKA.GD.ZS', 'NV.AGR.TOTL.ZS', 'SH.XPD.CHEX.GD.ZS',
+                        'GC.DOD.TOTL.GD.ZS', 'SE.XPD.PRIM.PC.ZS', 'NV.IND.TOTL.ZS') #tanks to MohammadMehdi Faryabi
+
+
+gdp_growth = c(
+  "NY.GDP.MKTP.KD.ZG" #GDP growth (annual %)
+)
+
+for(indicator in economic_indicators){
+  print(
+    data1 %>% 
+      filter(year > 1990) %>% 
+      filter(Indicator.Code==indicator) %>% 
+      ggplot(data=., aes(x=str_year, y=measure)) + geom_boxplot() + geom_point(data = . %>% filter(Country.Code=='IRN'), aes(x=str_year, y=measure), color = 'red')
+  )
+}
+```
+
+
+***
+
+<p dir="RTL">
+۶. در قسمت قبل با استفاده از روش خوشه بندی k-means داده ها را به سه دسته تقسیم کنید. ایران در کدام دسته می گنجد؟ (پیش از خوشه بندی طبیعتا داده را باید پاکسازی و استاندارد سازی نمایید.)
+</p>
+
+```{r}
+data1 %>% 
+  select(-Indicator.Name) %>% 
+  rename(country = `ï..Country.Name`, iso2c=Country.Code) %>% 
+  group_by(iso2c, country, Indicator.Code) %>% 
+  summarise(m_measure = mean(measure, na.rm = TRUE)) %>% 
+  filter(Indicator.Code %in% union(economic_indicators, gdp_growth)) %>% 
+  spread(Indicator.Code, m_measure)  -> data_q6
+
+
+for(i in 3:(data_q6 %>% dim %>% .[2])){
+  data_q6[,i] %>% .[complete.cases(.),] %>% unlist() %>% mean(na.rm = TRUE) -> k
+  data_q6[,i] = ifelse(is.nan(data_q6[,i] %>% unlist()), k, data_q6[,i] %>% unlist())
+  data_q6[,i] = (data_q6[,i] %>% unlist() - mean(data_q6[,i] %>% unlist())) / sd(data_q6[,i] %>% unlist())
+}
+data_q6 %>%  
+  ungroup() -> data_q6
+data_q6 %>% 
+  select(-country, -iso2c) %>% 
+  kmeans(., centers = 3) %>% 
+  .$cluster -> data_q6$cluster
+
+data_q6 %>% 
+  select(country, cluster) %>% View
+```
+
+
+***
+
+<p dir="RTL">
+۷. به وسیله تحلیل مولفه اصلی بعد داده رو به دو کاهش دهید سپس خوشه های به دست آمده در قسمت قبل را بر روی آن نمایش دهید. آیا عملکرد روش خوشه بندی شما مطلوب بوده است؟
+</p>
+
+```{r}
+pca <- prcomp(data_q6 %>% select(-country, -iso2c, -cluster))
+
+pca$x %>% 
+  as.data.frame() %>% 
+  select(PC1, PC2) %>% 
+  cbind(data_q6$cluster) %>% 
+  mutate(clusters = paste("cluster", `data_q6$cluster`)) %>% 
+  ggplot(aes(x = PC1, y = PC2, color = clusters)) + geom_point()
+```
+
+
+***
+
+<p dir="RTL">
+۸. با استفاده از داده روشی برای پیش بینی رشد اقتصادی ایران در سال آینده ارائه دهید.
+</p>
+
+```{r}
+data1 %>% 
+  select(-Indicator.Name) %>% 
+  rename(country = `ï..Country.Name`, iso2c=Country.Code) %>% 
+  filter(iso2c=="IRN") %>% 
+  filter(Indicator.Code %in% union(economic_indicators, gdp_growth)) %>% 
+  spread(Indicator.Code, measure) %>% 
+  select(-country, -iso2c, -str_year) -> data_q8
+  
+for(i in 2:(data_q8 %>% dim %>% .[2])){
+  data_q8[,i] %>%  mean(na.rm = TRUE) -> k
+  data_q8[,i] = ifelse(is.na(data_q8[,i]), k, data_q8[,i])
+}
+data_q8 %>% 
+  select(-GC.DOD.TOTL.GD.ZS) %>% 
+  .[complete.cases(.),]->data_q8
+h2o.init()
+data_q8 %>% 
+  as.h2o() %>% 
+  h2o.glm(y=gdp_growth, x=colnames(.), .) 
+```
+
+
+***
+
+<p dir="RTL"> 
+۹. سوالهای ۵ تا ۷ را ابتدا برای ۲۰ شاخص سلامت سپس بر حسب ۲۰ شاخص آموزشی تکرار کنید.
+</p>
+
+```{r}
+
+education_indicators = c('SE.ADT.1524.LT.FE.ZS', 'SE.ADT.1524.LT.MA.ZS', 'SE.ADT.LITR.FE.ZS', 'SE.ADT.LITR.MA.ZS',
+                        'SE.COM.DURS', 'SE.PRM.NENR', 'SE.XPD.PRIM.PC.ZS', 'SE.XPD.SECO.PC.ZS',
+                        'SE.XPD.TERT.PC.ZS', 'SE.XPD.PRIM.ZS', 'SE.XPD.SECO.ZS', 'SE.XPD.TERT.ZS',
+                        'IP.JRN.ARTC.SC', 'GB.XPD.RSDV.GD.ZS', 'SE.PRE.ENRL.TC.ZS',
+                        'SE.PRE.ENRR.FE', 'SE.PRE.ENRR.MA', 'SE.PRM.AGES', 'SE.PRM.CMPT.FE.ZS',
+                        'SE.PRM.CMPT.MA.ZS') #tanks to MohammadMehdi Frayabi
+for(indicator in education_indicators){
+  print(
+    data1 %>% 
+      filter(year > 1990) %>% 
+      filter(Indicator.Code==indicator) %>% 
+      ggplot(data=., aes(x=str_year, y=measure)) + geom_boxplot() + geom_point(data = . %>% filter(Country.Code=='IRN'), aes(x=str_year, y=measure), color = 'red') + ylab(indicator)
+  )
+}
+
+data1 %>% 
+  select(-Indicator.Name) %>% 
+  rename(country = `ï..Country.Name`, iso2c=Country.Code) %>% 
+  group_by(iso2c, country, Indicator.Code) %>% 
+  summarise(m_measure = mean(measure, na.rm = TRUE)) %>% 
+  filter(Indicator.Code %in% education_indicators) %>% 
+  spread(Indicator.Code, m_measure)  -> data_q9_1
+
+
+for(i in 3:(data_q9_1 %>% dim %>% .[2])){
+  data_q9_1[,i] %>% .[complete.cases(.),] %>% unlist() %>% mean(na.rm = TRUE) -> k
+  data_q9_1[,i] = ifelse(is.nan(data_q9_1[,i] %>% unlist()), k, data_q9_1[,i] %>% unlist())
+  data_q9_1[,i] = (data_q9_1[,i] %>% unlist() - mean(data_q9_1[,i] %>% unlist())) / sd(data_q9_1[,i] %>% unlist())
+}
+data_q9_1 %>%  
+  ungroup() -> data_q9_1
+data_q9_1 %>% 
+  select(-country, -iso2c) %>% 
+  kmeans(., centers = 3) %>% 
+  .$cluster -> data_q9_1$cluster
+
+data_q9_1 %>% 
+  select(country, cluster) %>% View
+
+pca <- prcomp(data_q9_1 %>% select(-country, -iso2c, -cluster))
+
+pca$x %>% 
+  as.data.frame() %>% 
+  select(PC1, PC2) %>% 
+  cbind(data_q9_1$cluster) %>% 
+  mutate(clusters = paste("cluster", `data_q9_1$cluster`)) %>% 
+  ggplot(aes(x = PC1, y = PC2, color = clusters)) + geom_point()
+
+
+
+
+
+
+
+
+
+health_indicators = c('SH.DYN.MORT', 'SH.DYN.NCOM.ZS', 'SH.MED.BEDS.ZS', 'SH.STA.ANVC.ZS',
+                         'SH.STA.SUIC.P5', 'SH.STA.TRAF.P5', 'SP.DYN.LE00.FE.IN', 'SP.DYN.LE00.MA.IN',
+                         'SP.DYN.TO65.FE.ZS', 'SP.DYN.TO65.MA.ZS', 'SP.POP.0014.TO.ZS', 'SP.POP.1564.TO.ZS',
+                         'SP.POP.65UP.TO.ZS', 'SH.IMM.IDPT', 'SH.IMM.MEAS', 'SH.XPD.CHEX.GD.ZS', 'SH.MMR.DTHS',
+                         'SH.H2O.BASW.ZS', 'SH.H2O.SMDW.ZS', 'SH.HIV.1524.FE.ZS', 'SH.HIV.1524.MA.ZS') #tanks to MohammadMehdi Frayabi
+for(indicator in health_indicators){
+  print(
+    data1 %>% 
+      filter(year > 1990) %>% 
+      filter(Indicator.Code==indicator) %>% 
+      ggplot(data=., aes(x=str_year, y=measure)) + geom_boxplot() + geom_point(data = . %>% filter(Country.Code=='IRN'), aes(x=str_year, y=measure), color = 'red') + ylab(indicator)
+  )
+}
+
+data1 %>% 
+  select(-Indicator.Name) %>% 
+  rename(country = `ï..Country.Name`, iso2c=Country.Code) %>% 
+  group_by(iso2c, country, Indicator.Code) %>% 
+  summarise(m_measure = mean(measure, na.rm = TRUE)) %>% 
+  filter(Indicator.Code %in% health_indicators) %>% 
+  spread(Indicator.Code, m_measure)  -> data_q9_2
+
+
+for(i in 3:(data_q9_2 %>% dim %>% .[2])){
+  data_q9_2[,i] %>% .[complete.cases(.),] %>% unlist() %>% mean(na.rm = TRUE) -> k
+  data_q9_2[,i] = ifelse(is.nan(data_q9_2[,i] %>% unlist()), k, data_q9_2[,i] %>% unlist())
+  data_q9_2[,i] = (data_q9_2[,i] %>% unlist() - mean(data_q9_2[,i] %>% unlist())) / sd(data_q9_2[,i] %>% unlist())
+}
+data_q9_2 %>%  
+  ungroup() -> data_q9_2
+data_q9_2 %>% 
+  select(-country, -iso2c) %>% 
+  kmeans(., centers = 3) %>% 
+  .$cluster -> data_q9_2$cluster
+
+data_q9_2 %>% 
+  select(country, cluster) %>% View
+
+pca <- prcomp(data_q9_2 %>% select(-country, -iso2c, -cluster))
+
+pca$x %>% 
+  as.data.frame() %>% 
+  select(PC1, PC2) %>% 
+  cbind(data_q9_2$cluster) %>% 
+  mutate(clusters = paste("cluster", `data_q9_2$cluster`)) %>% 
+  ggplot(aes(x = PC1, y = PC2, color = clusters)) + geom_point()
+```
+
+
+***
+
+<p dir="RTL"> 
+۱۰. کشورهای دنیا را بر حسب ۶۰ شاخص اقتصادی، سلامت و آموزش با روش سلسله مراتبی خوشه بندی کرده و دندروگرام آن را رسم نمایید. اگر داده ها بر سه دسته تقسیم شوند ایران در کدام دسته می گنجد؟
+</p>
+
+```{r}
+
+indicators = union(union(economic_indicators, health_indicators), education_indicators)
+data1 %>% 
+  select(-Indicator.Name) %>% 
+  rename(country = `ï..Country.Name`, iso2c=Country.Code) %>% 
+  group_by(iso2c, country, Indicator.Code) %>% 
+  summarise(m_measure = mean(measure, na.rm = TRUE)) %>% 
+  filter(Indicator.Code %in% indicators) %>% 
+  spread(Indicator.Code, m_measure)  -> data_q10
+
+
+for(i in 3:(data_q10 %>% dim %>% .[2])){
+  data_q10[,i] %>% .[complete.cases(.),] %>% unlist() %>% mean(na.rm = TRUE) -> k
+  data_q10[,i] = ifelse(is.nan(data_q10[,i] %>% unlist()), k, data_q10[,i] %>% unlist())
+  data_q10[,i] = (data_q10[,i] %>% unlist() - mean(data_q10[,i] %>% unlist())) / sd(data_q10[,i] %>% unlist())
+}
+data_q10 %>%  
+  ungroup() -> data_q10
+data_q10 %>% 
+  select(-country, -iso2c) %>% 
+  dist(method = "euclidean") %>% 
+  hclust(method = "complete") -> clus
+plot(clus, hang = -1, cex = 0.4)
+rect.hclust(clus, 3)
+```
+
+
+
+***
+
+<p dir="RTL"> 
+۱۱. سه یافته جالب از داده ها استخراج کنید.
+</p>

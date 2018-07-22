@@ -1,0 +1,235 @@
+---
+title: "Association rules"
+subtitle: "Movie recommender systems"
+author: "Aryan Tajmirriahi"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+<div align="center">
+<img  src="images/rs_cover.jpg"  align = 'center'>
+</div>
+
+> <p dir="RTL"> 
+با استفاده از داده نظرهای فیلم به سوالات زیر پاسخ دهید.
+</p>
+
+<p dir="RTL">
+در این تمرین با توجه به حجیم بودن داده سعی شده تا حد امکان از data.table به جای dplyr استفاده شود.
+</p>
+
+```{r}
+library(readr)
+library(dplyr)
+library(stringr)
+library(data.table)
+library(highcharter)
+library(ggplot2)
+library(arules)
+library(arulesViz)
+library(colorspace)
+library(stringr)
+library(stopwords)
+moviz = read_delim("E://edu//TahlilDade//ml-10M100k//movies.dat", delim = "::", 
+                   col_names = c("MovieID", NA, "Title", NA, "Genres")) %>% select(1,3,5)
+# moviz %>% head %>% View()
+t_moviz = as.data.table(moviz)
+
+data.frame(MovieID=c(NA), Title=c(NA), Genre=c(NA)) -> genre_moviz
+for (i in 1:dim(moviz)[1]) {
+  moviz[i,] %>% .$Genres %>%  str_extract_all("\\w+") %>% .[[1]] -> genres
+  moviz[i,] %>% .$MovieID ->movieid
+  moviz[i,] %>% .$Title -> title
+  for (genre in genres) {
+    data.frame(MovieID=c(movieid), Title=c(title), Genre=c(genre)) %>% rbind(genre_moviz)->genre_moviz
+  }
+}
+genre_moviz %>% 
+  .[complete.cases(.),] ->genre_moviz
+# genre_moviz %>%  arrange(MovieID) %>% head %>% View()
+t_genre_moviz = as.data.table(genre_moviz)
+
+
+tags = read_delim("E://edu//TahlilDade//ml-10M100k//tags.dat", delim = "::", 
+                  col_names = c("UserID", NA, "MovieID", NA, "Tag", NA, "Timestamp")) %>%
+  select(1,3,5, 7)
+# tags %>% head %>% View()
+t_tags = as.data.table(tags)
+
+
+rating = read_delim("E://edu//TahlilDade//ml-10M100k//ratings.dat", delim = "::", 
+                    col_names = c("UserID", NA, "MovieID", NA, "Rating", NA, "Timestamp")) %>% 
+  select(1,3,5, 7)
+# rating %>% head %>% View()
+t_rating = as.data.table(rating)
+```
+
+
+***
+
+<p dir="RTL">
+۱. آماره های زیر را بیابید.
+الف. محبوب ترین فیلم کدام است؟
+ب. بیشترین نظرات درباره چه فیلمی داده شده است؟
+پ. منفورترین فیلم کدام است؟
+ت. تعداد فیلم های ساخته شده در هر سال
+ث. در هر سالی مردم به چه ژانری علاقه مند بوده اند.
+</p>
+
+```{r}
+t_rating[,.(tot_rat=mean(Rating, na.rm=TRUE), num_rat=.N), by=.(MovieID)][t_moviz,,on=.(MovieID)][order(desc(tot_rat)),,] %>% View()
+t_tags[,.(num = .N), by=.(MovieID)][t_moviz,,on=.(MovieID)][order(desc(num)),,] %>% View()
+t_rating[,.(tot_rat=mean(Rating, na.rm=TRUE)), by=.(MovieID)][t_moviz,,on=.(MovieID)][order(tot_rat),,] %>% View()
+t_moviz[,.(year = as.integer(str_sub(str_extract(Title, "\\(\\d+\\)"), 2, 5))),][!is.na(year),.(num = .N), by=.(year)][order(desc(num)),,] %>% View()
+t_moviz[,.(Genres, Title, MovieID, year = as.integer(str_sub(str_extract(Title, "\\(\\d+\\)"), 2, 5))),][!is.na(year),,][t_rating,,on=.(MovieID)][,.(mscore=mean(Rating, na.rm=TRUE)),by=.(year, Genres)][!is.na(year),,][ order(desc(mscore)),,] %>% group_by(year) %>% slice(1) %>% View()
+
+```
+
+
+***
+
+<p dir="RTL">
+۲. ژانر فیلم ها را استخراج نمایید.  سپس آماره های زیر را استخراج نمایید.
+الف. نمودار ستونی تعداد فیلم های هر ژانر
+ب. نمودار همبستگی ژانرها
+پ. متوسط امتیاز به هر ژانر
+ت. دوران طلایی فیلم سازی 
+</p>
+
+```{r}
+
+t_genre_moviz[,.(num = .N), by=.(Genre)][num>5,,][order(num)] ->genres
+genres%>% ggplot(aes(x= Genre, y = num), data = .)  +geom_col()
+genre_moviz %>% filter(Genre %in% genres$Genre) %>% 
+  full_join(., ., by=c("MovieID")) %>% group_by(Genre.x, Genre.y) %>% summarise(value=n()) %>%
+  ggplot(aes(x=Genre.x, y=Genre.y, fill=value)) + geom_tile()
+```
+
+
+***
+
+<p dir="RTL">
+۳. نمودار ابر لغات را بر حسب کلمات عنوان فیلم ها رسم نمایید.
+</p>
+
+```{r}
+wstone = moviz$Title %>% 
+  str_replace_all("\"","") %>% 
+  str_replace_all("[[:punct:]]","") %>% 
+  str_split(pattern = "\\s") %>% 
+  unlist() %>% 
+  table() %>% 
+  as.data.frame(stringsAsFactors = F)
+colnames(wstone) = c("word","count")
+wstone$word = str_to_lower(wstone$word)
+wstone = wstone %>%
+  filter(!str_to_lower(word) %in% stopwords()) %>% 
+  filter(str_length(word)>1) %>% 
+  filter(!str_detect(word,"\\d")) %>%
+  arrange(desc(count))
+library(tm)
+stopwords()
+library(wordcloud)
+wordcloud(wstone$word[1:100],wstone$count[1:100],
+          c(5,.3), random.order = FALSE, color = brewer.pal(8, "Dark2"), random.color = FALSE)
+
+```
+
+
+***
+
+<p dir="RTL">
+۴. با استفاده از قوانین همبستگی یک توصیه گر برای فیلم ها بسازید. شبیه ترین فیلم ها به لیست زیر را پیدا کنید.
+</p>
+
+* Castle in the Sky (1986)
+* Cast Away (2000)
+* No Country for Old Men (2007)
+* Memento (2000)
+
+```{r}
+full_join(rating, moviz) %>%
+  .[complete.cases(.),] %>% 
+  group_by(Rating, UserID) %>% 
+  summarise(str = paste(Title, collapse = ";")) -> str_transaction
+transaction = lapply(str_transaction$str,FUN = function(x) strsplit(x,split = ";")[[1]])
+t_tra <- as(transaction, "transactions")
+myrules = apriori(t_tra, parameter = list(support = 0.001,
+                                             confidence = 0.25, minlen = 2))
+
+# yourrules = subset(myrules, items %in% c("Memento (2000)", "Cast Away (2000)", "Castle in the Sky (Tenkû no shiro Rapyuta) (1986)"))
+# inspect(sort(yourrules, by = "lift")[1:10]) #inspecting those films
+```
+
+
+***
+
+<p dir="RTL">
+۵. تمرین سخت: در گیت هاب برای خود اکانت درست کنید. همه تمرین های خود را آنجا بارگذاری کنید! و لینک آن را ارسال نمایید.
+</p>
+
+<p dir="RTL">
+https://github.com/artajmir3/TahlilDade
+</p>
+
+
+***
+
+<p dir="RTL">
+۶. پنج انتقاد از درس و نحوه تدریس را بیان کنید.
+</p>
+
+<p dir="RTL">
+ضمن تشکر از شما استاد ارجمند باید ذکر کنم با وجود انتقادات زیر این درس یکی از فوق العاده ترین درسهایی  بود که در دوره کارشناسی گذراندم ولی:
+۱-بنظر من بهتر بود روی بیس ریاضی قضایا و درس ها مانور بیشتری میدادید این موضوع میتوانست به تعمیق مباحث کمک کند.
+۲-برخی داده بسیار کثیف و ناقص بودن شاید بهتر بود داده های تمیز تری برای درس در نظر گرفته می شد
+۳-
+</p>
+
+***
+
+<p dir="RTL">
+۷. پنج پیشنهاد برای بهتر شدن درس بیان کنید.
+</p>
+
+
+***
+
+<p dir="RTL">
+۸. سه موضوع آماری جدید برای جایگزینی در سرفصل ها پیشنهاد دهید.
+</p>
+
+<p dir="RTL">
+۱- موضوع پردازش تصویر
+۲- آموزش مدل ها مختلف یادگیری ماشین مانند svm,...
+۳-
+</p>
+
+***
+
+<p dir="RTL"> 
+۹. سه داده جالب برای کار در کلاس پیشنهاد دهید.
+</p>
+
+<p dir="RTL"> 
+۱- داده های تبلیغات یک سایت و موفق بودن یا نبودن آنها.
+۲- داده های هواشناسی
+۳- داده های مربوط به ترافیک
+</p>
+
+***
+
+<p dir="RTL"> 
+۱۰. چهار نکته مهمی که در کلاس یاد گرفتید را بیان کنید.
+</p>
+
+<p dir="RTL"> 
+۱-GIGO یا به اصطلاح Garbage in Garbage out فهمیدم که قبل از هر کاری باید داده را تمیز کرد
+۲- فهمیدم داده ی خوب به خودی خود بسیار ارزشمند است و در هر حال کاربردی دارد
+۳- با استدلال درست و صحیح آماری آشنا شدم
+۴-
+</p>
+

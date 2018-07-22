@@ -1,0 +1,601 @@
+---
+title: "Eighth Week: Text Analysis in R"
+subtitle: "To be, or not to be"
+author: "Aryan"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+<div align="center">
+<img  src="images/dickens1_1.png"  align = 'center'>
+</div>
+
+> <p dir="RTL"> 
+با استفاده از بسته gutenberg داده های لازم را به دست آورید و به سوالات زیر پاسخ دهید.
+</p>
+
+<p dir="RTL">
+در تعداد زیادی از سوالات با توجه به طول کشیدن بیش از حد محاسبات کد ها کامنت شده اند و نتایج قبلا در یک فایل ذخیره شده و از آن خوانده می شود در سوال ۱۰ دو ایده زده شده در اولی هر فیچر شباهت کتاب با کتاب های دیگر دو نویسنده است و در ایده دومی هر فیچر یکی از ۱۰۰ زوج پر کاربرد در کار های دو نویسنده. برای وسالات ۹ و ۱۰ کار های آقای تواین انتخاب شده اند.
+</p>
+
+***
+
+<p dir="RTL">
+۱. چارلز دیکنز نویسنده معروف انگلیسی بالغ بر چهارده رمان (چهارده و نیم) نوشته است. متن تمامی کتاب های او را دانلود کنید و سپس بیست لغت برتر استفاده شده را به صورت یک نمودار ستونی نمایش دهید. (طبیعتا باید ابتدا متن را پاکسازی کرده و stopping words را حذف نمایید تا به کلماتی که بار معنایی مشخصی منتقل می کنند برسید.)
+</p>
+
+```{r}
+library(tidytext)
+library(dplyr)
+library(stringr)
+library(wordcloud)
+library(highcharter)
+library(gutenbergr)
+library(tidyr)
+library(wordcloud2)
+ThePickwickPapers = gutenberg_download(580)
+OliverTwist = gutenberg_download(730)
+NicholasNickleby = gutenberg_download(967)
+TheOldCuriosityShop = gutenberg_download(700)
+BarnabyRudge = gutenberg_download(917)
+MartinChuzzlewit = gutenberg_download(968)
+DombeyandSon = gutenberg_download(821)
+DavidCopperfield =gutenberg_download(766)
+BleakHouse =gutenberg_download(1023)
+HardTimes =gutenberg_download(786)
+LittleDorrit =gutenberg_download(963)
+ATaleofTwoCities = gutenberg_download(98)
+GreatExpectations = gutenberg_download(1400)
+OurMutualFriend = gutenberg_download(883)
+TheMysteryofEdwinDrood =gutenberg_download(564)
+
+LesMiserables = gutenberg_download(135)
+
+
+books = list(ThePickwickPapers,
+             OliverTwist,
+             NicholasNickleby,
+             TheOldCuriosityShop,
+             BarnabyRudge,
+             MartinChuzzlewit,
+             DombeyandSon,
+             DavidCopperfield,
+             BleakHouse,
+             HardTimes,
+             LittleDorrit,
+             ATaleofTwoCities,
+             GreatExpectations,
+             OurMutualFriend,
+             TheMysteryofEdwinDrood)
+
+
+titles = list("The Pickwick Papers",
+             "Oliver Twist",
+             "Nicholas Nickleby",
+             "The Old Curiosity Shop",
+             "Barnaby Rudge",
+             "Martin Chuzzlewit",
+             "Dombey and Son",
+             "David Copperfield",
+             "Bleak House",
+             "Hard Times",
+             "Little Dorrit",
+             "A Tale of Two Cities",
+             "Great Expectations",
+             "Our Mutual Friend",
+             "The Mystery of Edwin Drood")
+
+
+wordlist = list()
+for( i in 1:15) {
+  book = books[[i]]$text
+  book %>% 
+    str_replace_all("\"","") %>% 
+    str_replace_all('\'', "") %>% 
+    str_replace_all("[[:punct:]]","") %>% 
+    str_split(pattern = "\\s") %>% 
+    unlist() %>% 
+    table() %>% 
+    as.data.frame(stringsAsFactors = F) -> words
+  colnames(words) = c("word","count")
+  words = words %>%
+    filter(!str_to_lower(word) %in% stop_words$word) %>% 
+    filter(str_length(word)>1) %>% 
+    filter(!str_detect(word,"\\d")) %>%
+    arrange(desc(count)) %>% 
+    mutate(is_name = !word %in% str_to_lower(word)) %>% 
+    mutate(Book_no = i) -> words
+  wordlist[[i]] <- words
+}
+dict = bind_rows(wordlist)
+dict %>% mutate(root = str_to_lower(word)) %>% group_by(root) %>% summarise(freq = sum(count)) %>% arrange(desc(freq))  %>% select(word = root, freq) ->freq
+
+freq %>% 
+  slice(1:20) %>% hchart(type = "bar", hcaes(word, freq))
+
+```
+
+
+***
+
+<p dir="RTL">
+۲. ابر لغات ۲۰۰ کلمه پرتکرار در رمان های چارلز دیکنز را رسم نمایید. این کار را با بسته wordcloud2 انجام دهید. برای دانلود می توانید به لینک زیر مراجعه کنید.
+</p>
+
+https://github.com/Lchiffon/wordcloud2
+
+<p dir="RTL">
+ با استفاده از عکسی که در ابتدا متن آمده ابر لغاتی مانند شکل زیر رسم کنید. (راهنمایی: از ورودی figpath در دستور wordcloud2 استفاده نمایید.مثالی در زیر آورده شده است.)
+</p>
+
+<div align="center">
+<img  src="images/tag-word-cloud-Che-Guevara.jpg"  align = 'center'>
+</div>
+
+```{r}
+freq$word <- as.factor(freq$word)
+rownames(freq) <- freq$word
+freq %>% slice(1:200) %>% wordcloud2(size = 0.35, color = "black", figPath = "E://edu//TahlilDade//images//dickens1_2.png")
+
+```
+
+
+***
+
+<p dir="RTL">
+۳. اسم پنج شخصیت اصلی در هر رمان دیکنز را استخراج کنید و با نموداری تعداد دفعات تکرار شده بر حسب رمان را رسم نمایید. (مانند مثال کلاس در رسم اسامی شخصیت ها در سری هر پاتر)
+</p>
+
+```{r}
+for(i in 1:15){
+  dict %>% 
+    filter(Book_no == i) %>% 
+    filter(is_name == TRUE) %>% 
+    arrange(desc(count)) %>% 
+    slice(1:5) %>% 
+    mutate(ratio = count / sum(count)) %>% 
+    hchart(type = "column", hcaes(word, ratio)) %>% 
+    hc_title(text = paste(titles[[i]], " pcharacters")) %>% 
+    print()
+}
+```
+
+
+***
+
+<p dir="RTL">
+۴.  در بسته tidytext داده ایی به نام sentiments وجود دارد که فضای احساسی لغات را مشخص می نماید. با استفاده از این داده نمودار ۲۰ لغت برتر negative و ۲۰ لغت برتر positive را در کنار هم رسم نمایید. با استفاده از این نمودار فضای حاکم بر داستان چگونه ارزیابی می کنید؟ (به طور مثال برای کتاب داستان دو شهر فضای احساسی داستان به ترتیب تکرر در نمودار زیر قابل مشاهده است.)
+</p>
+
+<div align="center">
+<img  src="images/sentiments.png"  align = 'center'>
+</div>
+
+```{r}
+for(i in 1:15){
+  dict %>% 
+    filter(Book_no == i) %>% 
+    mutate(root = str_to_lower(word)) %>% 
+    group_by(root) %>% 
+    summarise(freq = sum(count)) %>% 
+    select(word = root, freq) %>%  
+    full_join(., sentiments) %>% 
+    filter(sentiment == "positive") %>% 
+    arrange(desc(freq)) %>% 
+    slice(1:20) %>% 
+    hchart("bar", hcaes(word, freq)) %>% 
+    hc_title(text = paste(titles[[i]], " positive words")) %>% 
+    print()
+  dict %>% 
+    filter(Book_no == i) %>% 
+    mutate(root = str_to_lower(word)) %>% 
+    group_by(root) %>% 
+    summarise(freq = sum(count)) %>% 
+    select(word = root, freq) %>%  
+    full_join(., sentiments) %>% 
+    filter(sentiment == "negative") %>% 
+    arrange(desc(freq)) %>% 
+    slice(1:20) %>% 
+    hchart("bar", hcaes(word, freq)) %>% 
+    hc_title(text = paste(titles[[i]], " negative words")) %>% 
+    print()
+  dict %>% 
+    filter(Book_no == i) %>% 
+    mutate(root = str_to_lower(word)) %>% 
+    group_by(root) %>% 
+    summarise(freq = sum(count)) %>% 
+    filter(nchar(root) >=3) %>% 
+    arrange(desc(freq)) %>% 
+    select(word = root, freq) %>%  
+    full_join(., sentiments) %>% 
+    group_by(sentiment) %>% 
+    summarise(count = sum(freq, na.rm = TRUE)) %>% 
+    arrange(desc(count)) %>% 
+    filter(!is.na(sentiment)) %>% 
+    filter(!sentiment %in% c("negative", "positive")) %>% 
+    hchart("bar", hcaes(x = sentiment, y = count)) %>% 
+    hc_title(text = paste("sentiments in ", titles[[i]])) %>% 
+    print()
+}
+```
+
+
+***
+
+<p dir="RTL">
+۵. متن داستان بینوایان را به ۲۰۰ قسمت مساوی تقسیم کنید. برای هر قسمت تعداد لغات positive و negative را حساب کنید و سپس این دو سری زمانی را در کنار هم برای مشاهده فضای احساسی داستان رسم نمایید.
+</p>
+
+```{r}
+LesMiserables %>% 
+  str_replace_all("\"","") %>% 
+  str_replace_all('\'', "") %>% 
+  str_replace_all("[[:punct:]]","") %>% 
+  str_split(pattern = "\\s") %>%
+  unlist %>% 
+  tibble() -> words
+colnames(words) <- c("word")
+words %>% 
+  filter(!str_detect(word, "\\d")) %>% 
+  filter(nchar(word) >= 1) %>% 
+  mutate(true = 1, id = cumsum(true), section = id %/% (n() %/%  200) + 1) %>% 
+  full_join(sentiments) %>% 
+  filter(!is.na(sentiment)) %>% 
+  filter(sentiment %in% c("positive", "negative")) %>% 
+  group_by(section, sentiment) %>% 
+  summarise(count = n()) %>% 
+  group_by(section) %>% 
+  mutate(ratio = count / sum(count)) %>% 
+  hchart("line", hcaes(x = section, y = ratio, group = sentiment))
+```
+
+
+***
+
+<p dir="RTL">
+۶. ابتدا ترکیبات دوتایی کلماتی که پشت سر هم می آیند را استخراج کنید و سپس نمودار ۳۰ جفت لغت پرتکرار را رسم نمایید.
+</p>
+
+```{r}
+
+###This will take a few minutes if you are in hurry you may just load results from file
+#ngramlist = list()
+#for(i in 1:15){
+#  books[[i]] %>% 
+#    str_replace_all("\"","") %>% 
+#    str_replace_all("[[:punct:]]","") %>% 
+#    str_split(pattern = "\\s") %>% 
+#    as.character() %>% tibble() -> knit
+#  colnames(knit) <- c("text")
+#  knit %>% 
+#    unnest_tokens(ngram, text, token = "ngrams", n = 2) %>% 
+#    table()->ngramlist[[i]]
+#}
+#ngram = bind_rows(ngram_list)
+#write.csv(ngram, "E://edu//TahlilDade//ngram6.csv")
+ngram = read.csv("E://edu//TahlilDade//ngram6.csv")
+ngram %>% 
+  filter(!str_detect(word1, "\\d")) %>% 
+  filter(!str_detect(word2, "\\d")) %>%
+  group_by(word1, word2) %>% 
+  summarise(count = sum(n)) %>% 
+  arrange(desc(count)) %>% 
+  ungroup() %>% 
+  slice(1:30) %>%
+  mutate(new = paste(word1, word2)) %>% 
+  hchart(type = "bar", hcaes(new, count))
+```
+
+
+***
+
+<p dir="RTL">
+۷. جفت کلماتی که با she و یا he آغاز می شوند را استخراج کنید. بیست فعل پرتکراری که زنان و مردان در داستان های دیکنز انجام می دهند را استخراج کنید و نمودار آن را رسم نمایید.
+</p>
+
+```{r}
+ngram %>% 
+  filter(!str_detect(word1, "\\d")) %>% 
+  filter(!str_detect(word2, "\\d")) %>%
+  group_by(word1, word2) %>% 
+  summarise(count = sum(n)) %>% 
+  filter(word1 %in% c("he", "He", "she", "She")) %>% 
+  ungroup() %>% 
+  arrange(desc(count)) %>% 
+  filter(!word2 %in% c("was", "is", "s", "would", "might", "should", "could", "d", "ll", "will", "were", "must", "never", "did", "can", "and")) -> act
+act %>% 
+  filter(word1 == "he") %>% slice(1:20) %>%
+  hchart(type = "bar", hcaes(word2, count))
+act %>% 
+  filter(word1 == "she") %>% slice(1:20) %>%
+  hchart(type = "bar", hcaes(word2, count))
+
+```
+
+
+***
+
+<p dir="RTL">
+۸. برای کتاب های دیکنز ابتدا هر فصل را جدا کنید. سپی برای هر فصل 
+1-gram, 2-gram
+را استخراج کنید. آیا توزیع  N-gram
+در کارهای دیکنز یکسان است؟ با رسم نمودار هم این موضوع را بررسی کنید.
+</p>
+
+```{r}
+####bigram
+#this part will take about 20 minuts
+# mylist = list()
+# cnt <- 0
+# 
+# ngram_list = list()
+# for(k in 1:15){
+#   print("book: ")
+#   print(k)
+#   print(cnt)
+#   books[[k]] %>% 
+#     mutate(true = 1) %>% 
+#     mutate(id = cumsum(true)) -> id_book
+#   id_book%>% 
+#     filter(str_detect(text, "CHAPTER") | str_detect(text, "Chapter")) %>% .$id -> chapter_list
+#   id_book %>% 
+#     group_by(id) %>% mutate(chapter = sum(id > chapter_list)) -> chapter_book
+#   for (i in unique(chapter_book$chapter)){
+#     cnt <- cnt + 1
+#     print(cnt)
+#     chapter_book %>% 
+#       filter(chapter == i) %>% .$text %>% 
+#       str_replace_all("\""," ") %>% 
+#       str_replace_all("[[:punct:]]"," ") %>% 
+#       str_split(pattern = "") -> list_all
+#     a = c()
+#     for(j in 1:length(list_all)){
+#       a = append(a, list_all[[j]])
+#     }
+#     a %>% str_to_lower() %>% tibble() %>% 
+#       select(char1 = '.') %>% 
+#       mutate(char2 = lead(char1)) %>% group_by(char1, char2) %>% 
+#       summarise(n = n()) %>% ungroup() %>% 
+#       mutate(chapter = i, book = k) -> ngram_list[[cnt]]
+#   }
+# }
+# ngram = bind_rows(ngram_list)
+# ngram %>% 
+#   group_by(chapter, book) %>% 
+#   filter(sum(n) > 500) %>%
+#   filter(!str_detect(char1, "\\d")) %>% 
+#   filter(!str_detect(char2, "\\d")) %>% 
+#   group_by(char1, chapter, book) %>% 
+#   mutate(prob = n / sum(n)) %>% 
+#   ungroup() -> ngram
+# 
+# write.csv(ngram, "E://edu//TahlilDade//ngram2.csv", row.names = FALSE)
+ngram <- read.csv("E://edu//TahlilDade//ngram2.csv")
+
+ngram %>% 
+  filter(chapter == 45, book == 12) %>% 
+  arrange(desc(prob)) %>%
+  ungroup() %>% 
+  slice(1:20) %>% 
+  hchart(type = "column", hcaes(paste(char1, char2), n))
+
+ngram %>% 
+  filter(chapter == 74, book == 1) %>% 
+  arrange(desc(prob)) %>%
+  ungroup() %>% 
+  slice(1:20) %>% 
+  hchart(type = "column", hcaes(paste(char1, char2), n))
+
+
+
+#this part will take about 20 minuts
+# mylist = list()
+# cnt <- 0
+# 
+# ngram_list = list()
+# for(k in 1:15){
+#   print("book: ")
+#   print(k)
+#   print(cnt)
+#   books[[k]] %>% 
+#     mutate(true = 1) %>% 
+#     mutate(id = cumsum(true)) -> id_book
+#   id_book%>% 
+#     filter(str_detect(text, "CHAPTER") | str_detect(text, "Chapter")) %>% .$id -> chapter_list
+#   id_book %>% 
+#     group_by(id) %>% mutate(chapter = sum(id > chapter_list)) -> chapter_book
+#   for (i in unique(chapter_book$chapter)){
+#     cnt <- cnt + 1
+#     print(cnt)
+#     chapter_book %>% 
+#       filter(chapter == i) %>% .$text %>% 
+#       str_replace_all("\""," ") %>% 
+#       str_replace_all("[[:punct:]]"," ") %>% 
+#       str_split(pattern = "") -> list_all
+#     a = c()
+#     for(j in 1:length(list_all)){
+#       a = append(a, list_all[[j]])
+#     }
+#     a %>% str_to_lower() %>% tibble() %>% 
+#       select(char1 = '.') %>% 
+#       group_by(char1) %>% 
+#       summarise(n = n()) %>% ungroup() %>% 
+#       mutate(chapter = i, book = k) -> ngram_list[[cnt]]
+#   }
+# }
+# ngram = bind_rows(ngram_list)
+# ngram %>% 
+#   group_by(chapter, book) %>% 
+#   filter(sum(n) > 500) %>%
+#   filter(!str_detect(char1, "\\d")) %>% 
+#   group_by(chapter, book) %>% 
+#   mutate(prob = n / sum(n)) %>% 
+#   ungroup() -> ngram
+# ngram %>% View()  
+# write.csv(ngram, "E://edu//TahlilDade//ngram1.csv", row.names = FALSE)
+ngram <- read.csv("E://edu//TahlilDade//ngram1.csv")
+
+```
+
+***
+
+<p dir="RTL"> 
+۹. برای آثار ارنست همینگوی نیز تمرین ۸ را تکرار کنید. آیا بین آثار توزیع n-grams در بین آثار این دو نویسنده یکسان است؟
+</p>
+
+```{r}
+TheAdventuresofTomSawyer = gutenberg_download(74) 
+AdventuresofHuckleberryFinn = gutenberg_download(76)
+ConnecticutYankeeinKingArthursCourt = gutenberg_download(86)
+ATrampAbroad = gutenberg_download(119)
+LifeontheMississippi = gutenberg_download(245)
+
+books_tw = list(
+  TheAdventuresofTomSawyer,
+  AdventuresofHuckleberryFinn,
+  ConnecticutYankeeinKingArthursCourt,
+  ATrampAbroad,
+  LifeontheMississippi
+)
+#this part will take a few minuts
+# mylist = list()
+# cnt <- 0
+# 
+# ngram_list = list()
+# for(k in 1:length(books_tw)){
+#   print("book: ")
+#   print(k)
+#   print(cnt)
+#   books_tw[[k]] %>% 
+#     mutate(true = 1) %>% 
+#     mutate(id = cumsum(true)) -> id_book
+#   id_book%>% 
+#     filter(str_detect(text, "CHAPTER") | str_detect(text, "Chapter")) %>% .$id -> chapter_list
+#   id_book %>% 
+#     group_by(id) %>% mutate(chapter = sum(id > chapter_list)) -> chapter_book
+#   for (i in unique(chapter_book$chapter)){
+#     cnt <- cnt + 1
+#     print(cnt)
+#     chapter_book %>% 
+#       filter(chapter == i) %>% .$text %>% 
+#       str_replace_all("\""," ") %>% 
+#       str_replace_all("[[:punct:]]"," ") %>% 
+#       str_split(pattern = "") -> list_all
+#     a = c()
+#     for(j in 1:length(list_all)){
+#       a = append(a, list_all[[j]])
+#     }
+#     a %>% str_to_lower() %>% tibble() %>% 
+#       select(char1 = '.') %>% 
+#       mutate(char2 = lead(char1)) %>% group_by(char1, char2) %>% 
+#       summarise(n = n()) %>% ungroup() %>% 
+#       mutate(chapter = i, book = k) -> ngram_list[[cnt]]
+#   }
+# }
+# ngram = bind_rows(ngram_list)
+# ngram %>% 
+#   group_by(chapter, book) %>% 
+#   filter(sum(n) > 500) %>%
+#   filter(!str_detect(char1, "\\d")) %>% 
+#   filter(!str_detect(char2, "\\d")) %>% 
+#   group_by(char1, chapter, book) %>% 
+#   mutate(prob = n / sum(n)) %>% 
+#   ungroup() -> ngram
+# write.csv(ngram, "E://edu//TahlilDade//ngram_tw.csv", row.names = FALSE)
+ngram = read.csv("E://edu//TahlilDade//ngram_tw.csv")
+
+```
+
+
+***
+
+<p dir="RTL"> 
+۱۰. بر اساس دادهایی که در تمرین ۸ و ۹ از آثار دو نویسنده به دست آوردید و با استفاده از  N-gram ها یک مدل لاجستیک برای تشخیص صاحب اثر بسازید. خطای مدل چقدر است؟ برای یادگیری مدل از کتاب کتاب الیور تویست اثر دیکنز و کتاب پیرمرد و دریا استفاده نکنید. پس از ساختن مدل برای تست کردن فصل های این کتابها را به عنوان داده ورودی به مدل بدهید. خطای تشخیص چقدر است؟
+</p>
+
+<p dir="RTL"> 
+مدل بدست آمده دارای دقت بیش از ۹۸ درصد روی داده تست است که نشانگر دقت بالای آن است.برای این مدل احتمال هر حرف به شرط حرف قبلی را برای ۵۰۰ دو حرف متوالی در نظر گرفتیم.
+</p>
+
+```{r}
+ngram_cd <- read.csv("E://edu//TahlilDade//ngram2.csv")
+ngram_cd %>% mutate(word = paste(char1, char2)) -> ngram_cd
+ngram_cd %>% 
+  group_by(char1, char2, word) %>% 
+  summarise(count = sum(n)) %>% 
+  ungroup() %>% 
+  arrange(desc(count)) %>% 
+  slice(1:500) -> top_cd
+
+ngram_tw <- read.csv("E://edu//TahlilDade//ngram_tw.csv")
+ngram_tw %>% mutate(word = paste(char1, char2)) -> ngram_tw
+ngram_tw %>% 
+  group_by(char1, char2, word) %>% 
+  summarise(count = sum(n)) %>% 
+  ungroup() %>% 
+  arrange(desc(count)) %>% 
+  slice(1:500) -> top_tw
+
+features = union(top_cd$word, top_tw$word)
+
+###this part of code is for gethering training data. it will take a few minuts for run so i just loaded the results from a filte
+# a = list()
+# a[1:length(features)] = NA
+# set = data.frame(a)
+# colnames(set) <- features
+# for(k in 1:length(books)){
+#   print(k)
+#   for (i in unique(ngram_cd$chapter)) {
+#     ngram_cd %>% 
+#       filter(book == k & chapter == i) %>% 
+#       filter(word %in% features) -> b
+#     a[1:length(features)] = 0
+#     if(nrow(b)>= 1){
+#       for (j in 1:nrow(b)) {
+#         a[[which(features %in% c(b$word[j]))]] = b$prob[j]
+#       }
+#       d = data.frame(as.list(a))
+#       colnames(d) <- features
+#       set <- rbind(d, set)
+#     }
+#   }
+# }
+# set %>% mutate(is_dickens = 1) %>% filter(!is.na("  ")) -> set_cd
+# 
+# 
+# a = list()
+# a[1:length(features)] = NA
+# set = data.frame(a)
+# colnames(set) <- features
+# for(k in 1:length(books_tw)){
+#   print(k)
+#   for (i in unique(ngram_tw$chapter)) {
+#     ngram_tw %>% 
+#       filter(book == k & chapter == i) %>% 
+#       filter(word %in% features) -> b
+#     a[1:length(features)] = 0
+#     if(nrow(b)>= 1){
+#       for (j in 1:nrow(b)) {
+#         a[[which(features %in% c(b$word[j]))]] = b$prob[j]
+#       }
+#       d = data.frame(as.list(a))
+#       colnames(d) <- features
+#       set <- rbind(d, set)
+#     }
+#   }
+# }
+# set %>% mutate(is_dickens = 0) %>% filter(!is.na("  ")) -> set_tw
+# set = rbind(set_cd, set_tw)
+# write.csv(set, "E://edu//TahlilDade//set.csv", row.names = FALSE)
+set = read.csv("E://edu//TahlilDade//set.csv")
+library(h2o)
+h2o.init()
+hdata = as.h2o(set)
+hglm = h2o.glm(y = "is_dickens", training_frame = hdata, family = "binomial", nfolds = 5)
+hglm
+
+```
+

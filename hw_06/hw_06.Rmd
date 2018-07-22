@@ -1,0 +1,263 @@
+---
+title: "Sixth Week: Linear Models"
+subtitle: "House price prediction"
+author: "Aryan Tajmirriahi"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+<div align="center">
+<img  src="images/house.jpg"  align = 'center'>
+</div>
+
+> <p dir="RTL"> 
+با توجه به داده های قیمت منازل
+لطفا با سوالات زیر پاسخ دهید.
+</p>
+
+<p dir="RTL">
+در کل ای تمرین برای بالا رفتن دقت کل داده هایی که شرایط فروششان غیرنرمال بود را از مجموعه آموزشی خود حذف کردیم.
+</p>
+
+```{r}
+library(readr)
+library(dplyr)
+library(highcharter)
+library(corrplot)
+dic_var = read_delim("E://edu//TahlilDade//dictionnaire_variables.csv", delim = ";")
+dic_nvx = read_csv("E://edu//TahlilDade//dictionnaire_niveaux.csv", col_names = c("variable", "label", "Type")) %>% select(1:3)
+house = read_csv("E://edu//TahlilDade//train.csv")
+house %>% filter(SaleCondition == "Normal") -> house
+```
+
+
+***
+
+<p dir="RTL">
+۱. ماتریس همبستگی متغیرهای مختلف را به دست آورده و سپس رسم نمایید.
+اعداد به دست آمده را با آزمون فرض معناداری همبستگی بسنجید و سپس ده متغیری که همبستگی بالاتری با قیمت دارند را مشخص نمایید.
+</p>
+
+```{r}
+#1
+house %>% select_if(is.numeric) -> house_num
+cor_mat = cor(house_num, use = "pairwise.complete.obs")
+cor_mat %>% View()
+cor.mtest(cor_mat) -> cor_test
+
+cbind.data.frame(cor_mat[,38], cor_test$p[,38]) -> final
+colnames(final)[1] = 'corr'
+colnames(final)[2] = 'pval'
+final$name = rownames(final)
+final %>% filter(pval < 0.05) %>% arrange(desc(corr)) %>% slice(2:11) %>% select(name) ->selected_cols
+selected_cols
+```
+
+
+***
+
+<p dir="RTL">
+۲. در یک تصویر نمودار پراکنش دو به دو ده متغیر بدست آمده به همراه قیمت را رسم نمایید و هم خطی بودن متغیرها را بررسی کنید
+</p>
+
+```{r}
+#2
+selected_cols = selected_cols$name 
+house %>% select(one_of(union(selected_cols, "SalePrice"))) -> n_house
+pairs(n_house)
+
+```
+
+
+***
+
+<p dir="RTL">
+۳. یک مدل خطی بر اساس ده متغیر برای پیش بینی قیمت برازش دهید. و سپس خلاصه نتایج مدل را به دست آورید.
+</p>
+
+```{r}
+#3
+fit = lm(SalePrice ~OverallQual + GrLivArea + GarageCars + GarageArea + TotalBsmtSF + FullBath + TotRmsAbvGrd + YearBuilt + YearRemodAdd + `1stFlrSF`,data = n_house)
+summary(fit)
+```
+
+
+***
+
+<p dir="RTL">
+۴. نمودار قیمت واقعی و قیمت پیش بینی را رسم نمایید و خوب بودن مدل را ارزیابی کنید.
+</p>
+
+<p dir="RTL">
+چنانچه در نمودار پیداست مدل نسبتا خوبی داریم که تقریبا بر خط همانی مستقر است.
+</p>
+
+```{r}
+#4
+n_house$predicted_price = predict(fit)
+n_house %>% hchart("point", hcaes(x = predicted_price, y = SalePrice))
+```
+
+
+***
+
+<p dir="RTL">
+۵. مقدار
+R-squared
+ مدل را به دست آورید. آیا بر اساس این کمیت مدل به خوبی به داده ها برازش داده شده است؟
+ کمیت
+ F-statistic
+ را در خلاصه مدل تفسیر نمایید.
+</p>
+
+<p dir="RTL">
+در این سوال فقط مقدار 
+R-squared
+حساب شده است.
+</p>
+
+```{r}
+#5
+sstot = sum((n_house$SalePrice - mean(n_house$SalePrice))^2)
+ssres = sum((n_house$SalePrice - n_house$predicted_price)^2)
+1 - ssres / sstot
+```
+
+
+***
+
+<p dir="RTL">
+۶. بر اساس
+p-value
+ سطح معناداری ضرایب تصمیم بگیرید که چه متغیرهایی در مدل سازی استفاده شود.
+بر اساس متغیرهای جدید دوباره مدل سازی کنید و نتایج رو گزارش دهید.
+</p>
+
+<p dir="RTL">
+در این سوال پارامتر های که
+p-value
+بیش از 0.05 داشتند از پارامتر های ما حذف شدند.
+</p>
+
+```{r}
+data.frame(summary(fit)$coefficients)%>% filter(`Pr...t..` < 0.05)  %>% View()
+fit = lm(SalePrice ~OverallQual + GrLivArea + GarageCars + TotalBsmtSF + FullBath + YearBuilt + YearRemodAdd + `1stFlrSF`,data = n_house)
+summary(fit)
+```
+
+
+***
+
+<p dir="RTL">
+۷. مدل خود را بر اساس باقی مانده نقص یابی کنید.
+سه محک 
+normality, independance, Constant Variance
+ را در نقص یابی خود در نظر بگیرید.
+</p>
+
+<p dir="RTL">
+در این سوال برای 
+Constatnt variance
+صرفا نمودار کشیدیم و مشخصا مقدار ثابت نیست و برای 
+independence
+از تست
+vif و
+برای 
+normality
+از تست 
+qqplot
+استفاده شد.
+</p>
+
+```{r}
+library(car)
+shapiro.test(predict(fit))
+qqPlot(fit, id.method="identify", simulate = TRUE, main="Q-Q Plot")
+vif(fit)
+hchart(n_house$SalePrice - n_house$predicted_price)
+```
+
+
+***
+
+<p dir="RTL">
+۸. داده ها را به پنج قسمت تقسیم کنید. بر اساس چهار قسمت مدل خطی را بسازید و صحت مدل را برای یک قسمت 
+باقی مانده را تست کنید. خطای پیش بینی شما چقدر است؟
+</p>
+
+<p dir="RTL">
+در این سوال به تقلید از سایت kaggle از معیار RRMSE استفاده شد.
+</p>
+
+```{r}
+k = as.integer(0.8 * count(n_house))
+n_house_train <- n_house %>% slice(1:k)
+n_house_test <- n_house %>% slice(k : as.integer(count(n_house)))
+fit = lm(SalePrice ~OverallQual + GrLivArea + GarageCars + TotalBsmtSF + FullBath + YearBuilt + YearRemodAdd + `1stFlrSF`,data = n_house_train)
+n_house_test$predicted_price = predict(fit, n_house_test)
+sqrt(mean((n_house_test$predicted_price - n_house_test$SalePrice)))
+```
+
+
+
+***
+
+<p dir="RTL"> 
+۹. آیا قیمت ربط غیر خطی با یکی از ده متغیر استفاده شده دارد؟
+بر اساس دستاوردهای خود مدل را بهتر نمایید.
+</p>
+
+<p dir="RTL">
+در این سوال همه پارامتر ها خطی بودند و فقط برخی بازه های ناخطیشان را عوض کردیم.
+</p>
+
+```{r}
+selected_cols
+n_house %>% group_by(OverallQual) %>% summarise(mean_price = mean(SalePrice)) %>% hchart("point", hcaes(x = OverallQual, y  = mean_price))
+n_house %>% group_by(GrLivArea) %>% summarise(mean_price = mean(SalePrice)) %>% hchart("point", hcaes(x = GrLivArea, y  = mean_price))
+n_house %>% group_by(GarageCars) %>% summarise(mean_price = mean(SalePrice)) %>% hchart("point", hcaes(x = GarageCars, y  = mean_price))
+n_house %>% filter(GarageCars < 4)->n_house
+n_house %>% group_by(GarageArea) %>% summarise(mean_price = mean(SalePrice)) %>% hchart("point", hcaes(x = GarageArea, y  = mean_price))
+n_house %>% group_by(TotalBsmtSF) %>% summarise(mean_price = mean(SalePrice)) %>% hchart("point", hcaes(x = TotalBsmtSF, y  = mean_price))
+n_house %>% group_by(`1stFlrSF`) %>% summarise(mean_price = mean(SalePrice)) %>% hchart("point", hcaes(x = `1stFlrSF`, y  = mean_price))
+n_house %>% group_by(FullBath) %>% summarise(mean_price = mean(SalePrice)) %>% hchart("point", hcaes(x = FullBath, y  = mean_price))
+n_house %>% filter(FullBath > 0) -> n_house
+n_house %>% group_by(TotRmsAbvGrd) %>% summarise(mean_price = mean(SalePrice)) %>% hchart("point", hcaes(x = TotRmsAbvGrd, y  = mean_price))
+n_house %>% group_by(YearBuilt) %>% summarise(mean_price = mean(SalePrice)) %>% hchart("point", hcaes(x = YearBuilt, y  = mean_price))
+n_house %>% group_by(YearRemodAdd) %>% summarise(mean_price = mean(SalePrice)) %>% hchart("point", hcaes(x = YearRemodAdd, y  = mean_price))
+
+```
+
+
+***
+
+<p dir="RTL"> 
+۱۰. بر اساس مدل نهایی به دست آمده نتایج پیش بینی خود را بر روی
+test.csv
+به دست آورید و در سایت 
+kaggle
+ در مسابقه 
+ House Prices: Advanced Regression Techniques
+بارگذاری نمایید. سپس لینک رتبه و عدد آن را ضمیمه تمرین کنید.
+</p>
+
+<p dir="RTL">
+https://www.kaggle.com/c/house-prices-advanced-regression-techniques/team
+با خطای 0.61 
+</p>
+
+```{r}
+house_test = read_csv("E://edu//TahlilDade//test.csv")
+house_test[is.na(house_test)] <- 0
+fit = lm(SalePrice ~OverallQual + GrLivArea + GarageCars + TotalBsmtSF + FullBath + YearBuilt + YearRemodAdd + `1stFlrSF`,data = n_house_train)
+house_test$SalePrice = predict(fit, house_test)
+house_test %>% View()
+house_test %>% select(Id, SalePrice) %>% write.csv("E://edu//TahlilDade//testans.csv", row.names = FALSE)
+
+
+```
+
+

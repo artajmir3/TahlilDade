@@ -1,0 +1,291 @@
+---
+title: "Fourth Week: Hypothesis Testing"
+subtitle: "TIMSS Analysis"
+author: "Aryan Tajmirriahi"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+<div align="center">
+<img  src="images/math.jpg"  align = 'center'>
+</div>
+
+<h1 dir="RTL"> 
+تمرین سری چهارم: چقدر ریاضی بلدیم و چرا؟
+</h1>
+
+<p dir="RTL"> لطفا مقاله زیر را مطالعه بفرمایید. </p>
+<p dir="RTL">
+[چرایی رتبه ضعیف ایران در آزمون تیمز](https://goo.gl/gX8DZc)
+</p>
+
+> <p dir="RTL"> 
+با استفاده از داده های ارزیابی تیمز ۲۰۱۵ ادعاهای زیر را مورد ارزیابی قراردهید.
+برای هر سوال علاوه بر استدلال آماری که در غالب آزمون فرض تعریف می شود از تصویرسازی مناسب باهر دو ابزار
+ggplot2
+و
+highcharter
+استفاده نمایید.
+به دلخواه به هفت گزاره از موارد زیر پاسخ دهید.
+</p>
+
+<p dir="RTL">
+در ابتدا برای درست کار کردن کد سوالات کد های زیر را یکبار اجرا کنید.
+</p>
+
+```{r}
+library(readr)
+library(dplyr)
+library(highcharter)
+library(ggplot2)
+library(tidyr)
+library(ggthemes)
+bsa = read_rds("E://edu//TahlilDade//bsa.rds")
+bcg = read_rds("E://edu//TahlilDade//bcg.rds")
+bsg = read_rds("E://edu//TahlilDade//bsg.rds")
+bsr = read_rds("E://edu//TahlilDade//bsr.rds")
+bst = read_rds("E://edu//TahlilDade//bst.rds")
+btm = read_rds("E://edu//TahlilDade//btm.rds")
+bts = read_rds("E://edu//TahlilDade//bts.rds")
+```
+
+
+***
+
+<p dir="RTL">
+۱. میران رضایت معلمان در پیشرفت تحصیلی دانش آموزان موثر است.
+</p>
+
+<p dir="RTL">
+با توجه به کد زیر این گزاره با قدرت اطمینان بسیار زیاد تایید می شود.
+</p>
+
+```{r}
+bsa %>% mutate(tot_math_score = (bsmmat01 + bsmmat02 + bsmmat03 + bsmmat04 + bsmmat05) / 5) %>% select(idcntry, idstud, tot_math_score) -> student_score
+btm %>% select(idcntry, idtealin, btbg10b) -> teacher_satisfy
+bst %>% select(idcntry, idtealin, idstud) ->student_cntry_teacher
+full_join(student_cntry_teacher, student_score) %>% full_join(teacher_satisfy) %>% .[complete.cases(.), ] ->score_stisfy
+fit <- aov(btbg10b ~ tot_math_score, data = score_stisfy)
+summary.aov(fit)
+score_stisfy %>% group_by(btbg10b) %>% summarise(m = mean(tot_math_score)) -> stat
+stat %>% hchart(type = "column",hcaes(x = btbg10b, y = m))
+ggplot(data = stat, aes(x = btbg10b, y = m)) + geom_col() + theme_bw()
+```
+
+
+***
+
+<p dir="RTL">
+۲. والدینی که تحصیلات بیشتری دارند دارای فرزندان موفق تری می باشند.
+</p>
+
+<p dir="RTL">
+با توجه به کد زیر این گزاره با قدرت اطمینان بسیار زیاد تایید می شود.
+</p>
+
+```{r}
+bsa %>% mutate(tot_math_score = (bsmmat01 + bsmmat02 + bsmmat03 + bsmmat04 + bsmmat05) / 5) %>% select(idcntry, idstud, tot_math_score) -> student_score
+bsg %>% filter(bsbg07a < 8 & bsbg07b < 8) %>% mutate(parent_edu = bsbg07a + bsbg07a) %>% select(idcntry, idstud, parent_edu) ->student_parent_edu
+full_join(student_parent_edu, student_score) %>% .[complete.cases(.), ] ->stat
+stat%>% aov(tot_math_score ~ parent_edu, data = .) -> fit
+summary.aov(fit)
+stat %>% group_by(parent_edu) %>% summarise(m = mean(tot_math_score)) -> stat
+stat %>% hchart(type = "column",hcaes(x = parent_edu, y = m))
+ggplot(data = stat, aes(x = parent_edu, y = m)) + geom_col() + theme_bw()
+```
+
+
+***
+
+<p dir="RTL">
+۳. امکانات رفاهی در خانه موجب پیشرفت تحصیلی می گردد.
+</p>
+
+***
+
+<p dir="RTL">
+۴. محیط آرام مدرسه نقش مهمی در پیشرفت تحصیلی دارد.
+</p>
+
+***
+
+<p dir="RTL">
+۵. معلمان با تحصیلات  بالاتر یا تجربه بیشتر دانش آموزان موفق تری تربیت می کنند.
+</p>
+
+<p dir="RTL">
+با توجه به کد زیر این گزاره برای هر دو مورد با قدرت اطمینان بسیار زیاد تایید می شود.
+</p>
+
+```{r}
+bsa %>% mutate(tot_math_score = (bsmmat01 + bsmmat02 + bsmmat03 + bsmmat04 + bsmmat05) / 5) %>% select(idcntry, idstud, tot_math_score) -> student_score
+btm %>% select(idcntry, idtealin, btbg01, btbg04) -> teacher_exp
+bst %>% select(idcntry, idtealin, idstud) ->student_cntry_teacher
+full_join(student_cntry_teacher, student_score) %>% full_join(teacher_exp) %>% .[complete.cases(.), ] -> student_score_exp
+student_score_exp %>%  aov(tot_math_score ~ btbg01, data = .) %>% summary.aov()
+student_score_exp %>% group_by(btbg01) %>% summarise(m = mean(tot_math_score)) -> stat
+stat %>% hchart(type = "line",hcaes(x = btbg01, y = m))
+ggplot(data = stat, aes(x = btbg01, y = m)) + geom_line() + geom_point() + theme_bw()
+student_score_exp %>%  aov(tot_math_score ~ btbg04, data = .) %>% summary.aov()
+student_score_exp %>% group_by(btbg04) %>% summarise(m = mean(tot_math_score)) -> stat
+stat %>% hchart(type = "column",hcaes(x = btbg04, y = m))
+ggplot(data = stat, aes(x = btbg04, y = m)) + geom_col() + theme_bw()
+```
+
+
+***
+
+<p dir="RTL"> 
+۶. پسران در کاربرد هندسه قوی تر هستند.
+</p>
+
+<p dir="RTL">
+اگر منظور از کاربرد هندسه نمرشان در هندسه باشد  دقیقا نقیض این گزاره اثبات می شود
+</p>
+
+```{r}
+bsa %>% mutate(geo_score = (bsmgeo01 + bsmgeo02 + bsmgeo03 + bsmgeo04 + bsmgeo05) / 5) %>% select(idcntry, idstud, geo_score) ->student_geo
+bsg %>% select(idcntry, idstud, itsex) -> student_sex
+full_join(student_geo, student_sex) %>% .[complete.cases(.), ] -> stat
+stat %>% t.test(geo_score ~ itsex, data = ., alt = "greater")
+stat %>% group_by(itsex) %>% summarise(m = mean(geo_score)) -> stat
+stat %>% hchart(type = "column",hcaes(x =  itsex, y = m))
+ggplot(data = stat, aes(x = itsex, y = m)) + geom_col() + theme_bw()
+
+```
+
+
+***
+
+<p dir="RTL"> 
+۷. تغذیه دانش آموزان نقش اساسی در یادگیری آنها دارد. 
+</p>
+
+<p dir="RTL"> 
+با توجه به کد زیر نقض خوردن صبحانه در نمره ریاضی زیاد است ولی این نقش به طور اکیدا صعودی یا اکیدا نزولی نمی باشد و صرفا این دو متغیر از هم مستقل نیستند.
+</p>
+
+```{r}
+bsa %>% mutate(tot_math_score = (bsmmat01 + bsmmat02 + bsmmat03 + bsmmat04 + bsmmat05) / 5) %>% select(idcntry, idstud, tot_math_score) -> student_score
+bsg %>% select(idcntry, idstud, bsbg12) -> student_food
+full_join(student_food, student_score) %>% .[complete.cases(.), ] -> stat
+stat %>% aov(tot_math_score ~ bsbg12, data = .) -> fit
+summary.aov(fit)
+stat %>% group_by(bsbg12) %>%  summarise(m = mean(tot_math_score)) -> stat
+stat %>% hchart(type = "line", hcaes(x = bsbg12, y = m))
+ggplot(data = stat, aes(x = bsbg12, y = m)) + geom_point() + geom_line() + theme_bw()
+```
+
+
+***
+
+<p dir="RTL"> 
+۸. مدارس با امکانات بیشتر دارای عملکرد بهتری می باشند.
+</p>
+
+***
+
+<p dir="RTL"> 
+۹. علت افت تحصیلی عدم مشارکت در کلاس است.
+</p>
+
+<p dir="RTL"> 
+با توجه به کد و نمودار زیر این موضوع تاثیر اساسس در موفقیت تحصیلی دارد.
+</p>
+
+```{r}
+bsa %>% mutate(tot_math_score = (bsmmat01 + bsmmat02 + bsmmat03 + bsmmat04 + bsmmat05) / 5) %>% select(idcntry, idstud, tot_math_score) -> student_score
+bsg %>% select(idcntry, idstud, bsbg11)-> student_abcent
+full_join(student_abcent, student_score) %>% .[complete.cases(.), ] -> stat
+stat %>% aov(tot_math_score ~ bsbg11, data = .) -> fit
+summary.aov(fit)
+stat %>% group_by(bsbg11) %>%  summarise(m = mean(tot_math_score)) -> stat
+stat %>% hchart(type = "line", hcaes(x = bsbg11, y = m))
+ggplot(data = stat, aes(x = bsbg11, y = m)) + geom_point() + geom_line() + theme_bw()
+```
+
+
+***
+
+<p dir="RTL"> 
+۱۰. دانش آموزان ایرانی در استدلال قوی تر از کاربرد هستند.
+</p>
+
+<p dir="RTL"> 
+متاسفانه در رابطه این سوال با توجه به کد زیر نه می توان گزاره را رد و نه تایید کرد.
+</p>
+
+```{r}
+bsa %>% mutate(app_math_score = (bsmapp01 + bsmapp02 + bsmapp03 + bsmapp04 + bsmapp05) / 5, res_math_score = (bsmrea01 + bsmrea02 + bsmrea03 + bsmrea04 + bsmrea05) / 5) %>% select(idcntry, idstud, app_math_score, res_math_score) -> student_score_app_res
+student_score_app_res %>% filter(idcntry == 364) %>%.[complete.cases(.), ] %>% gather(res_math_score, app_math_score, key = "key", value = "value") -> stat
+stat %>%  t.test(value~key, data = ., alt = "greater")
+stat %>% group_by(key) %>% summarise(m = mean(value)) -> stat
+ggplot(data = stat, aes(x = key, y = m)) + geom_col() + theme_bw()
+
+```
+
+
+***
+
+<p dir="RTL">
+سه گزاره جالب کشف کنید و ادعای خود را ثابت نمایید.
+</p>
+
+
+<p dir="RTL">
+تاثیر یکی بودن جنسیت دانش آموز و معلم بر موفقیت تحصیلی:
+بنابر کد زیر بنظر می آید دانش آموزانی که معلمشان جنس موافق خودشان بوده اند موفق تر عمل کرده اند تا آنها که مهلمشان جنس مخالف بوده اند.
+</p>
+
+```{r}
+bsa %>% mutate(tot_math_score = (bsmmat01 + bsmmat02 + bsmmat03 + bsmmat04 + bsmmat05) / 5) %>% select(idcntry, idstud, tot_math_score) -> student_score
+bsg %>% select(idcntry, idstud, itsex) -> student_sex
+bst %>% select(idcntry, idtealin, idstud) ->student_cntry_teacher
+btm %>% select(idcntry, idtealin, btbg02) -> teacher_sex
+full_join(student_score, student_sex) %>% full_join(student_cntry_teacher) %>% full_join(teacher_sex) %>% .[complete.cases(.), ] %>% mutate(is_same_sex = (itsex == btbg02)) -> q_11_1
+q_11_1 %>% aov(tot_math_score ~ is_same_sex, data = .) %>% summary.aov()
+q_11_1 %>% group_by(is_same_sex) %>% summarise(tot = mean(tot_math_score)) -> stat
+ggplot(data = stat, aes(x = is_same_sex, y = tot)) + geom_col() + theme_bw()
+
+```
+
+
+<p dir="RTL">
+تاثیر میزان وقتی که روی تمرینات علوم میگذارند با نمره ریاضی شان:
+در ابتدا به نظر می آید این دو متعیر با مستقل باشند ولی اینگونه نیستند و اگر وقتی که روی تمرینات علوم می گذارند خیلی زیاد باشد نمره ریاضی شان پایین می آید. تاثیر این دو متغیر بر هم با اطمینان زیادی نتیجه شد.
+</p>
+
+```{r}
+bsa %>% mutate(tot_math_score = (bsmmat01 + bsmmat02 + bsmmat03 + bsmmat04 + bsmmat05) / 5) %>% select(idcntry, idstud, tot_math_score) -> student_score
+bsg %>% select(idcntry, idstud, bsbs25bb) -> student_homework
+full_join(student_homework, student_score) %>% .[complete.cases(.), ] ->stat
+stat %>% aov(tot_math_score~bsbs25bb, data = .) %>% summary.aov()
+stat %>% group_by(bsbs25bb) %>% summarise(m = mean(tot_math_score)) -> stat
+stat %>% hchart(type = "line", hcaes(x = bsbs25bb, y = m))
+ggplot(data = stat, aes(x = bsbs25bb, y = m)) + geom_point() + geom_line() + theme_bw()
+```
+
+
+<p dir="RTL">
+تاثیر میزان نمره دهی معلمان به تمرین ها به میزان وقتی که دانش آموزان روی تمرینات می گذارند:
+همانطور که انتظار هم می رود این دو موضوع بر هم تاثیر چشم گیری می گذارند و آزمایش با درصد اطمینان بالا این موضوع را تایید می کند.
+</p>
+
+
+```{r}
+bsa %>% mutate(tot_math_score = (bsmmat01 + bsmmat02 + bsmmat03 + bsmmat04 + bsmmat05) / 5) %>% select(idcntry, idstud, tot_math_score) -> student_score
+bsg %>% select(idcntry, idstud, bsbm25ba) -> student_homework
+bst %>% select(idcntry, idtealin, idstud) ->student_cntry_teacher
+btm %>% select(idcntry, idtealin, btbm22ce) -> teacher_homework
+full_join(student_score, student_homework) %>% full_join(student_cntry_teacher) %>% full_join(teacher_homework) %>% .[complete.cases(.), ] -> q_11_3
+q_11_3 %>% aov(bsbm25ba ~ btbm22ce, data = .) %>% summary.aov()
+q_11_3 %>% group_by(btbm22ce) %>% summarise(tot = mean(bsbm25ba)) -> stat
+ggplot(data = stat, aes(x = btbm22ce, y = tot)) + geom_col() + theme_bw()
+hchart(stat, type = "line", hcaes(x = btbm22ce, y = tot))
+
+```
+
+

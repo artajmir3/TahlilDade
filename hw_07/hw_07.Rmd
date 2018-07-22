@@ -1,0 +1,304 @@
+---
+title: "Seventh Week: Generalized Linear Models"
+subtitle: "Murder or suicide"
+author: "Aryan Tajmirriahi"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+<div align="center">
+<img  src="images/giraffe-suicide-fail-cartoon.jpg"  align = 'center'>
+</div>
+
+> <p dir="RTL"> 
+با توجه به سوالات مرگ و میر در آمریکا به سوالات زیر پاسخ دهید.
+</p>
+
+
+<p dir="RTL">
+ابتدا کد زیر را برای آماده سازی اجرا کنید.
+</p>
+
+```{r}
+library(readr)
+library(dplyr)
+library(highcharter)
+library(ggplot2)
+library(ggthemes)
+library(corrplot)
+library(tidyr)
+data = read.csv("E://edu//TahlilDade//data//murder_suicide.csv")
+MannerOfDeath = read.csv("E://edu//TahlilDade//data//MannerOfDeath.csv")
+MethodOfDisposition = read.csv("E://edu//TahlilDade//data//MethodOfDisposition.csv")
+Race = read.csv("E://edu//TahlilDade//data//Race.csv")
+MartialStatus = read.csv("E://edu//TahlilDade//data//MaritalStatus.csv")
+Education2003Revision = read.csv("E://edu//TahlilDade//data//Education2003Revision.csv")
+Education1989Revision = read.csv("E://edu//TahlilDade//data//Education1989Revision.csv")
+
+data %>% mutate(trueAge = (AgeType == 1) * Age + (AgeType == 2) * Age/12 + (AgeType == 4) * Age/365 + (AgeType == 5) * Age/(365*60) + (AgeType == 6) * Age/(365*3600), isMurdur = (MannerOfDeath == 3)*1)  %>% select(isMurdur, MethodOfDisposition, trueAge, Race, MaritalStatus, InjuryAtWork, Sex, Education2003Revision, Icd10Code) ->new_data
+```
+
+
+***
+
+<p dir="RTL">
+۱. از میان متغیرهای داده مرگ و میر یک زیرمجموعه ایی بدون حشو در نظر بگیرید.
+ماتریس همبستگی متغیرهای مختلف را به دست آورده و سپس رسم نمایید. علاوه بر این نمودار پراکنش متغیرهای انتخاب شده را همزمان نسبت به هم رسم نمایید.
+</p>
+
+<p dir="RTL">
+چنانچه در بالا داده انتخاب شده ستون های سن (اصلاح شده بر اساس واحد آن) نحوه تدفین جنسیت نژاد وضعیت تاهل صدمه در کار تحصیلات و نحوه فوت انتخاب شده اند ولی برای همبستگی فقط آنهایی را انتخاب کردیم که عددی بودند هرچند برای دیگر قسمت ها اینگونه نیست.
+</p>
+
+```{r}
+new_data %>% select(isMurdur, Race, Education2003Revision, trueAge) %>%   cor(., use = "pairwise.complete.obs") -> cor_mat
+
+cor_mat
+cor.mtest(cor_mat) -> cor_test
+new_data %>% select(isMurdur, Race, Education2003Revision, trueAge) %>% pairs()
+```
+
+
+***
+
+<p dir="RTL">
+۲. اثر هر یک از متغیرهای جنسیت، نژاد،آموزش، سن و نحوه تدفین را بر مرگ یا خودکشی ارزیابی کنید.
+</p>
+
+<p dir="RTL">
+برای تک تک پارامتر ها نمودار توضیعشان بر حسب خودکشی یا قتل را کشیده ایم البته به جز icd10Code که نمودارش به علت فراوانی انواع ناخوانا بود
+</p>
+
+```{r}
+new_data %>% mutate(typeOfDeath = ifelse(isMurdur == 1,'murdur','suicide')) -> new_data1
+ggplot(data = new_data1, aes(x = trueAge, fill = typeOfDeath)) + geom_histogram(binwidth = 5)
+ggplot(data = new_data1, aes(x = MethodOfDisposition, fill = typeOfDeath)) + geom_bar(position = "fill")
+ggplot(data = new_data1, aes(x = Race, fill = typeOfDeath)) + geom_bar(position = "fill")
+ggplot(data = new_data1, aes(x = MaritalStatus, fill = typeOfDeath)) + geom_bar(position = "fill")
+ggplot(data = new_data1, aes(x = InjuryAtWork, fill = typeOfDeath)) + geom_bar(position = "fill")
+ggplot(data = new_data1, aes(x = Sex, fill = typeOfDeath)) + geom_bar(position = "fill")
+ggplot(data = new_data1, aes(x = Education2003Revision, fill = typeOfDeath)) + geom_bar(position = "fill")
+
+```
+
+
+***
+
+<p dir="RTL">
+۳. با استفاده از مدل رگرسیون لاجستیک یک مدل به داده ها برازش دهید و سپس آن را نقص یابی کنید.
+</p>
+
+<p dir="RTL">
+ابتدا داده های پرت را حذف کرده و سپس متغیر های Multinomial را پخش می کنیم.
+با توجه به زیاد شدن پارامتر ها امکان فیت کردن مدل هست ولی امکان بررسی آن نیست پس ابتدا روی یک مدل با پارامتر های کمتر بررسی می کنیم و سپس مدل اصلی را فیت می کنیم.
+</p>
+
+```{r}
+
+data %>% mutate(trueAge = (AgeType == 1) * Age + (AgeType == 2) * Age/12 + (AgeType == 4) * Age/365 + (AgeType == 5) * Age/(365*60) + (AgeType == 6) * Age/(365*3600), isMurdur = (MannerOfDeath == 3)*1)  %>% select(isMurdur, MethodOfDisposition, trueAge, Race, MaritalStatus, InjuryAtWork, Sex, Education2003Revision) ->new_data
+new_data %>% filter(trueAge < 200) -> new_data
+
+new_data$true = 1
+new_data %>% mutate(id = cumsum(true)) -> new_data
+new_data %>% spread(MethodOfDisposition, true, fill = 0, sep = '.') -> new_data
+new_data$true = 1
+new_data %>% spread(Race, true, fill = 0, sep = '.') -> new_data
+new_data$true = 1
+new_data %>% spread(MaritalStatus, true, fill = 0, sep = '.') -> new_data
+new_data$true = 1
+new_data %>% spread(InjuryAtWork, true, fill = 0, sep = '.') -> new_data
+new_data$true = 1
+new_data %>% spread(Sex, true, fill = 0, sep = '.') -> new_data
+fit = glm(isMurdur ~ ., data = new_data, family = "binomial")
+
+library(boot)
+glm.diag.plots(fit, glmdiag = glm.diag(fit))
+
+data %>% mutate(trueAge = (AgeType == 1) * Age + (AgeType == 2) * Age/12 + (AgeType == 4) * Age/365 + (AgeType == 5) * Age/(365*60) + (AgeType == 6) * Age/(365*3600), isMurdur = (MannerOfDeath == 3)*1)  %>% select(isMurdur, MethodOfDisposition, trueAge, Race, MaritalStatus, InjuryAtWork, Sex, Education2003Revision, Icd10Code) ->new_data
+new_data %>% filter(trueAge < 200) -> new_data
+
+new_data$true = 1
+new_data %>% mutate(id = cumsum(true)) -> new_data
+new_data %>% spread(MethodOfDisposition, true, fill = 0, sep = '.') -> new_data
+new_data$true = 1
+new_data %>% spread(Race, true, fill = 0, sep = '.') -> new_data
+new_data$true = 1
+new_data %>% spread(MaritalStatus, true, fill = 0, sep = '.') -> new_data
+new_data$true = 1
+new_data %>% spread(InjuryAtWork, true, fill = 0, sep = '.') -> new_data
+new_data$true = 1
+new_data %>% spread(Sex, true, fill = 0, sep = '.') -> new_data
+new_data$true = 1
+new_data %>% spread(Icd10Code, true, fill = 0, sep = '.') -> new_data
+fit = glm(isMurdur ~ ., data = new_data, family = "binomial")
+fit$coefficients
+```
+
+
+***
+
+<p dir="RTL">
+۴. با استفاده از سه نمودار خروجی مدل را نسبت به داده واقعی ارزیابی کنید.
+</p>
+
+<p dir="RTL">
+از نمودار های تدریس شده در اسلاید ها استفاده شد.دقت کنید به علت اینکه تخمین ما از احتمال بسیار به یک نزدیک شده در نمودار چگالی چیز زیادی پیدا نیست ولی این نشانه خوب بودن مدل است و نه بد بودن آن.
+</p>
+
+```{r}
+new_data$pred = predict(fit, newdata = new_data, type = "response")
+ggplot(new_data,aes(x = trueAge,y = pred,col = isMurdur))+ geom_point()
+
+#View(new_data)
+fit = glm(isMurdur ~ trueAge, data = new_data, family = binomial(link = 'logit'))
+new_data$pred = predict(fit, newdata = new_data, type = "response")
+ggplot(data = new_data, aes(x = trueAge, y = isMurdur)) + geom_point() + 
+  geom_line(aes(x = trueAge, y = pred), color = 'red', size = 0.3)
+
+fit = glm(isMurdur ~ ., data = new_data, family = "binomial")
+new_data$pred = predict(fit, newdata = new_data, type = "response")
+ggplot( new_data, aes( pred, color = as.factor(isMurdur))) + 
+  geom_density( size = 1 ) +
+  ggtitle( "Training Set's Predicted Score" ) + 
+  scale_color_economist( name = "data", labels = c( "Suicide", "Murdur" ) )
+
+```
+
+
+***
+
+<p dir="RTL">
+۵. ابتدا ۲۰ درصد داده را به صورت تصادفی به عنوان تست در نظر بگیرید. مدل را با استفاده از ۸۰ درصد باقی مانده برازش دهید. با استفاده از پارامتر قطع ۰.۵ نتایج را برای داده تست پیش بینی کنید. سپس کمیت های زیر را محاسبه کنید.
+</p>
+
+* P: positive samples
+* N: negative samples
+* TP: true positive TP (eqv. with hit)
+* TN: true negative (eqv. with correct rejection)
+* FP: false positive (eqv. with false alarm, Type I error)
+* FN: false negative (eqv. with miss, Type II error)
+* Accuracy (ACC) ACC = (TP+TN)/(P+T)
+* False positive rate (FPR): 1- TN/N
+* True positive rate (TPR): TP/P
+
+<p dir="RTL">
+مشابه آنچه در کلاس گفته شد نمایشی از  چهار کمیت 
+TN, TP,FP,FN
+به همراه داده ها رسم نمایید.
+</p>
+
+<p dir="RTL">
+در این بخش هم دقت ۹۹ درصد شاهدی بر خوب بودن مدل ماست دقت کنید هنوز بهترین پارامتر قطع را نیافتیم و در بخش بعد اینکار را انجام میدهیم
+</p>
+
+```{r}
+new_data <- new_data[sample(nrow(new_data)),]
+k = as.integer(0.8 * count(new_data))
+new_data %>% slice(1:k) -> train
+new_data %>% slice(k + 1:n()) -> test
+fit = glm(isMurdur ~ ., data = train, family = "binomial")
+test$prediction = predict(fit, newdata = test, type = "response", na.action = na.pass)
+train$prediction = predict(fit, newdata = train, type = "response", na.action = na.pass)
+cut_off = 0.5
+test %>% mutate(pred = (prediction > cut_off) * 1) -> test
+test %>% filter(pred == 1) %>% count() -> p
+test %>% filter(pred == 0) %>% count() -> n
+test %>% filter(pred == 1) %>% filter(isMurdur == 1) %>%  count() -> tp
+test %>% filter(pred == 0) %>% filter(isMurdur == 0) %>%  count() -> tn
+test %>% filter(pred == 1) %>% filter(isMurdur == 0) %>%  count() -> fp
+test %>% filter(pred == 0) %>% filter(isMurdur == 1) %>%  count() -> fn
+acc = (tp + tn)/(p +n)
+fpr = 1 - tn/n
+tpr = tp/p
+
+
+table(test$isMurdur,test$pred) %>% plot()
+
+```
+
+
+***
+
+<p dir="RTL">
+۶. نمودار صحت مدل (accuracy) را بر حسب مقادیر مختلف قطع برای داده تست رسم نمایید. کدام پارامتر قطع بالاترین صحت را در پیش بینی داراست؟
+</p>
+
+<p dir="RTL">
+نتایج این بخش نشان میدهد احتمالات بدست آمده آنقدر به ۰ یا ۱ نزدیکند که پارامتر قطع خیلی تاثیری در دقت ندارد. 
+دقت کنید کد سورس اندکی تغییر داده ام تا درست کار کند حتما این بخش و بخش بعد را با کدی که به همراه تمرین فرستاده ام اجرا کنید.
+</p>
+
+
+```{r}
+source("E://edu//TahlilDade//unbalanced_functions.R")
+test$isMurdur = as.factor(test$isMurdur)
+train$isMurdur = as.factor(train$isMurdur)
+#test$prediction = as.factor(test$prediction)
+#train$prediction = as.factor(train$prediction)
+accuracy_info = AccuracyCutoffInfo(train = train, test = test, predict = "prediction", actual = "isMurdur" )
+accuracy_info$plot
+
+```
+
+
+***
+
+<p dir="RTL">
+۷. نمودار 
+ROC
+ را برای داده های قسمت قبل رسم نمایید. همچنین نقطه مربوط به بهترین پارامتر قطع را مشخص نمایید.
+</p>
+
+<p dir="RTL">
+  این بخش هم مانند بخش قبل نشان میدهد پارامتر قطع دیگر تاثیر چندانی ندارد.در این بخش چون قاتل تشخیص دادن یک بیگناه خیلی بدتر از بیگناه تشخیص دادن یک قاتل است cost_fp را زیاد گرفتیم.
+</p>
+
+```{r}
+source("E://edu//TahlilDade//unbalanced_functions.R")
+cost_fp = 400;cost_fn = 100
+fit = glm(isMurdur ~ ., data = new_data, family = "binomial")
+new_data$predict = predict(fit, newdata = new_data, type = "response")
+roc_info = ROCInfo(data = new_data, predict = "predict", actual = "isMurdur", cost.fp = cost_fp, cost.fn = cost_fn )
+grid.draw(roc_info$plot)
+
+```
+
+
+***
+
+<p dir="RTL">
+۸. با قرار دادن کمیت 
+nfolds = 5
+و با استفاده از 
+H20
+مدل مساله را بسازید و نتیجه حاصل را ارزیابی کنید.
+</p>
+
+<p dir="RTL">
+نتایج این بخش هم مانند سوال ۵ نشان دهنده دقت خوب مدل است
+</p>
+
+```{r}
+library(h2o)
+h2o.init()
+hdata = as.h2o(new_data)
+hglm = h2o.glm(y = "isMurdur", training_frame = hdata, family = "binomial", nfolds = 5)
+hglm
+
+```
+
+
+***
+
+<p dir="RTL"> 
+۹. آیا ما میتوانیم سرویسی به قضات ارایه کنیم تا با استفاده از اطلاعات مرگ بتوانند موارد مشکوک به قتل را از خودکشی تفکیک دهند؟
+</p>
+
+<p dir="RTL"> 
+خیر زیرا در این مدل اطلاعاتی درباره مضنونان گنجانده نشده و استفاده از آن در این راه غیر اخلاقی است.
+</p>
+
+
